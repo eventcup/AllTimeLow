@@ -43,7 +43,7 @@ controls.autoRotate = false;
 controls.autoRotateSpeed = 1.2;
 
 // -----------------------------------------------------
-// Lights
+// Lights (ähnlich wie im Viewer von Don)
 // -----------------------------------------------------
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
 hemiLight.position.set(0, 1, 0);
@@ -56,50 +56,46 @@ scene.add(dirLight);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 
-// Grid (optional, per GUI)
+// Grid (per GUI einblendbar)
 const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
 
 // -----------------------------------------------------
-// Environment HDR (wie Studio-Licht)
+// Environment HDR (studio.hdr im Root)
 // -----------------------------------------------------
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
 
 new RGBELoader()
-  .setPath('env/')
   .load('studio.hdr', (hdrTex) => {
     const envMap = pmremGenerator.fromEquirectangular(hdrTex).texture;
     scene.environment = envMap;
+    // Wenn du den HDR-Hintergrund sehen willst:
+    // scene.background = envMap;
     hdrTex.dispose();
     pmremGenerator.dispose();
   });
 
 // -----------------------------------------------------
-// GLB laden
+// GLB laden (NeuerBecher1.glb im Root)
 // -----------------------------------------------------
-const loader = new GLTFLoader().setPath('models/');
+const loader = new GLTFLoader();
 let model = null;
 
 loader.load(
-  'NeuerBecher1.glb', // <-- HIER dein GLB-Name
+  'NeuerBecher1.glb',
   (gltf) => {
     model = gltf.scene;
     scene.add(model);
 
-    // Optional: Schatten (nur wenn du später Boden hinzufügst)
     model.traverse((obj) => {
       if (obj.isMesh) {
         obj.castShadow = true;
         obj.receiveShadow = true;
-        if (obj.material) {
-          obj.material.depthWrite = true;
-        }
       }
     });
 
-    // Model automatisch einpassen
     frameObject(model);
   },
   undefined,
@@ -108,7 +104,7 @@ loader.load(
   }
 );
 
-// Framing-Funktion ähnlich wie bei Don
+// Objekt automatisch schön ins Bild setzen
 function frameObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
@@ -132,7 +128,7 @@ function frameObject(object) {
 }
 
 // -----------------------------------------------------
-// GUI (Display / Lighting) – angelehnt an Don
+// GUI (Display & Lighting)
 // -----------------------------------------------------
 const params = {
   background: '#404040',
