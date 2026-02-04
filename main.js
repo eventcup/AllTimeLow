@@ -1,9 +1,9 @@
 // main.js
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/GLTFLoader.js';
-import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/RGBELoader.js';
-import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm';
+import * as THREE from 'https://unpkg.com/three@0.164.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js?module';
+import { GLTFLoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js?module';
+import { RGBELoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/RGBELoader.js?module';
+import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
 
 const container = document.getElementById('viewer-container');
 
@@ -74,7 +74,6 @@ new RGBELoader().load(
   'studio_small_03_2k.hdr',
   (hdrTex) => {
     const envMap = pmremGenerator.fromEquirectangular(hdrTex).texture;
-    envMap.mapping = THREE.EquirectangularReflectionMapping;
 
     scene.environment = envMap;
     // Wenn du den HDR-Hintergrund sehen willst:
@@ -116,7 +115,7 @@ loader.load(
   }
 );
 
-// Objekt automatisch schön ins Bild setzen (robust & einfach)
+// Objekt automatisch ins Bild setzen
 function frameObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
