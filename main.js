@@ -14,7 +14,7 @@ let plasticMaterial = null;
 
 // ===== Szene & Kamera =====
 const scene = new THREE.Scene();
-// dunkler Hintergrund, ähnlich Don
+// Hintergrund dunkel, wird später vom GUI geändert
 scene.background = new THREE.Color(0x191919);
 
 const camera = new THREE.PerspectiveCamera(
@@ -37,7 +37,6 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
-// useLegacyLights bleibt auf Default (false)
 
 container.appendChild(renderer.domElement);
 
@@ -60,12 +59,12 @@ scene.add(hemiLight);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
 scene.add(ambientLight);
 
-// Optionales Grid (über GUI zuschaltbar)
+// Optionales Grid
 const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
 
-// ===== Environment / HDRI (aus asset/) via PMREM =====
+// ===== Environment / HDRI (asset/studio_small_03_2k.hdr) via PMREM =====
 const rgbeLoader = new RGBELoader();
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
@@ -76,6 +75,10 @@ rgbeLoader.load(
     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
     scene.environment = envMap;
 
+    // <- zum Debuggen: HDR als Hintergrund anzeigen.
+    // Wenn du es nicht willst, kommentier die nächste Zeile aus:
+    scene.background = envMap;
+
     texture.dispose();
     pmremGenerator.dispose();
   },
@@ -85,7 +88,7 @@ rgbeLoader.load(
   }
 );
 
-// ===== GLB laden (aus asset/) =====
+// ===== GLB laden (asset/NeuerBecher1.glb) =====
 const gltfLoader = new GLTFLoader();
 
 gltfLoader.load(
@@ -100,18 +103,39 @@ gltfLoader.load(
           : [child.material];
 
         mats.forEach((m) => {
+          // Wir wollen nur physikalische / Standard-Materialien anfassen
           if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
-            // ersten "Plastik"-Kandidaten merken
-            if (!plasticMaterial) {
+            // Kandidat als Plastik-Material merken
+            if (
+              !plasticMaterial ||
+              (m.name &&
+                m.name.toLowerCase().includes("plastik")) ||
+              (m.name && m.name.toLowerCase().includes("becher"))
+            ) {
               plasticMaterial = m;
             }
 
-            if (m.transparent) {
-              m.depthWrite = false; // flimmerfreie Transparenz
+            // ::: GLAS-LOOK ERZWINGEN :::
+            // Basiswerte, die du mit dem GUI weiter anpassen kannst
+            m.roughness = 0.18;
+            m.metalness = 0.0;
+            m.envMapIntensity = 1.4;
+
+            // Transparenz erzwingen (falls aus Blender nicht sauber kommt)
+            m.opacity = 0.35;          // 0.0 = komplett durchsichtig, 1.0 = voll
+            m.transparent = true;
+            m.depthWrite = false;      // verhindert harte Schnittkanten
+            m.side = THREE.FrontSide;  // keine doppelte Vorderseite
+
+            // Falls Transmission vorhanden ist (KHR_materials_transmission)
+            if ("transmission" in m) {
+              m.transmission = 0.6;    // Lichtdurchlass
             }
-            if ("envMapIntensity" in m) {
-              m.envMapIntensity = 1.2; // etwas stärkere Reflektionen
+
+            if ("ior" in m) {
+              m.ior = 1.5;             // Plastik / Glas Bereich
             }
+
             m.needsUpdate = true;
           }
         });
@@ -119,7 +143,7 @@ gltfLoader.load(
     });
 
     scene.add(model);
-    frameObject(model);          // Kamera passend setzen
+    frameObject(model);
     setupMaterialGUI(plasticMaterial); // Material-Slider hinzufügen
   },
   undefined,
@@ -135,13 +159,11 @@ function frameObject(object) {
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
-  const fitOffset = 1.0; // wie nah dran, 1.0 = recht nah
+  const fitOffset = 1.0;
   const fov = (camera.fov * Math.PI) / 180;
   let distance = (maxDim / 2) / Math.tan(fov / 2);
-
   distance *= fitOffset;
 
-  // Kamera aus leicht schräger Richtung
   const direction = new THREE.Vector3(0.4, 0.3, 1).normalize();
   camera.position.copy(center).addScaledVector(direction, distance);
 
@@ -169,12 +191,13 @@ gui.domElement.style.position = "fixed";
 gui.domElement.style.top = "20px";
 gui.domElement.style.right = "20px";
 
-// Display-Ordner
+// Display
 const displayFolder = gui.addFolder("Display");
 displayFolder
   .addColor(params, "background")
   .name("Background")
   .onChange((val) => {
+    // Wenn HDR als Background gesetzt ist, überschreiben wir es hier bewusst
     scene.background = new THREE.Color(val);
   });
 displayFolder.add(params, "autoRotate").name("Auto Rotate");
@@ -186,7 +209,7 @@ displayFolder
   });
 displayFolder.open();
 
-// Lighting-Ordner
+// Lighting
 const lightFolder = gui.addFolder("Lighting");
 lightFolder
   .add(params, "exposure", 0.1, 3.0, 0.05)
@@ -216,14 +239,17 @@ lightFolder.open();
 
 // ===== Material-GUI für Plastik =====
 function setupMaterialGUI(mat) {
-  if (!mat) return;
+  if (!mat) {
+    console.warn("Kein Plastik-Material gefunden – Material-GUI wird übersprungen.");
+    return;
+  }
 
   const materialParams = {
-    roughness: mat.roughness ?? 0.4,
+    roughness: mat.roughness ?? 0.2,
     metalness: mat.metalness ?? 0.0,
-    transmission: mat.transmission ?? 0.0,
+    transmission: mat.transmission ?? 0.6,
     ior: mat.ior ?? 1.5,
-    opacity: mat.opacity ?? 1.0
+    opacity: mat.opacity ?? 0.35
   };
 
   const matFolder = gui.addFolder("Material (Plastic)");
@@ -270,6 +296,7 @@ function setupMaterialGUI(mat) {
     .onChange((v) => {
       mat.opacity = v;
       mat.transparent = v < 1.0;
+      mat.depthWrite = !mat.transparent;
       mat.needsUpdate = true;
     });
 
