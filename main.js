@@ -29,9 +29,12 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+// Farbmanagement / Tonemapping
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
+
+// (in älteren Versionen: physikalische Lichter)
 renderer.physicallyCorrectLights = true;
 
 container.appendChild(renderer.domElement);
@@ -61,15 +64,16 @@ const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
 
-// ===== Environment / HDRI (aus assets/) =====
+// ===== Environment / HDRI (aus asset/) =====
 const rgbeLoader = new RGBELoader();
 
 rgbeLoader.load(
-  'assets/studio_small_03_2k.hdr',
+  'asset/studio_small_03_2k.hdr',
   (texture) => {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = texture;
-    // scene.background = texture; // falls du den HDR-Hintergrund sichtbar haben willst
+    // Wenn du das HDR als Hintergrund sehen willst:
+    // scene.background = texture;
   },
   undefined,
   (err) => {
@@ -77,16 +81,16 @@ rgbeLoader.load(
   }
 );
 
-// ===== GLB laden (aus assets/) =====
+// ===== GLB laden (aus asset/) =====
 const gltfLoader = new GLTFLoader();
 let model = null;
 
 gltfLoader.load(
-  'assets/NeuerBecher1.glb',
+  'asset/NeuerBecher1.glb',
   (gltf) => {
     model = gltf.scene;
 
-    // Materialien minimal anfassen, damit Transparenz stabil ist
+    // Materialien minimal anfassen, damit Transparenz sauber bleibt
     model.traverse((child) => {
       if (child.isMesh && child.material) {
         const mats = Array.isArray(child.material)
@@ -96,7 +100,8 @@ gltfLoader.load(
         mats.forEach((m) => {
           if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
             if (m.transparent) {
-              m.depthWrite = false; // verhindert Flimmern bei Alpha
+              // verhindert Flimmern bei durchsichtigen Flächen
+              m.depthWrite = false;
             }
             m.needsUpdate = true;
           }
