@@ -1,124 +1,122 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Model Viewer - AR360.io</title>
-    <style>
-        html:not(.ready) [type=reset], html:not(.ready) [type=submit] {
-            pointer-events: none;
-        }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Eventcup – 3D Viewer</title>
 
-        html:not(.ready) * {
-            transition: none!important;
-        }
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            font-family: Open Sans, sans-serif;
-        }
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  font-family: sans-serif;
+}
 
-        .viewer {
-            width: 100%;
-            height: 100%;
-        }
+model-viewer {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color);
+}
 
-/* Styling für das Logo */
+/* Control Panel */
+.controls {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0,0,0,0.75);
+  padding: 15px;
+  border-radius: 10px;
+  color: white;
+  z-index: 200;
+  width: 220px;
+}
+
+.controls label {
+  display: block;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.controls input[type="range"],
+.controls input[type="color"] {
+  width: 100%;
+}
+
+/* Logo */
 .logo {
-    position: fixed;
-    bottom: 23px;
-    left: 23px; /* Auf der linken Seite */
-    width: 200px; /* Standardgröße */
-    height: auto;
-    z-index: 100;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 160px;
+  z-index: 200;
 }
 
-/* Für kleinere Geräte (z.B. Smartphones) */
 @media (max-width: 768px) {
-    .logo {
-        width: 110px; /* Kleinere Größe auf Handys */
-    }
+  .controls {
+    width: 180px;
+  }
+  .logo {
+    width: 110px;
+  }
 }
-
-
-        
-        /* Entfernen der Fortschrittsanzeige */
-        .loading-container {
-            display: none;
-        }
-
-    </style>
-    <link rel="stylesheet" href="https://ar360.io/css/ar360.css" />
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+</style>
 </head>
-<body>
+
+<body style="--bg-color:#ffffff;">
 
 <model-viewer
-    class="viewer"
-    style="width:100%; height:100%"
-    src="NeuerBecher1.glb"
-    enable-pan
-    min-field-of-view="1deg"
-    max-field-of-view="150deg"
-    interaction-prompt="none"
-    camera-controls
-    oncontextmenu="return false;"
-    alt="A 3D model"
+  id="viewer"
+  src="NeuerBecher1.glb"
+  camera-controls
+  exposure="1.1"
+  shadow-intensity="0.6"
+  environment-image="neutral"
+  interaction-prompt="none"
+  auto-rotate="false"
+  min-camera-orbit="auto auto 20%"
+  max-camera-orbit="auto auto 300%"
 >
 </model-viewer>
 
-<!-- Logo unten rechts -->
-<img src="logo.png" alt="Logo" class="logo">
+<!-- Controls -->
+<div class="controls">
+  <label>
+    Hintergrundfarbe
+    <input type="color" value="#ffffff" id="bgColor">
+  </label>
+
+  <label>
+    Helligkeit
+    <input type="range" min="0.5" max="2" step="0.05" value="1.1" id="exposure">
+  </label>
+
+  <label>
+    Auto Rotate
+    <input type="checkbox" id="rotate">
+  </label>
+</div>
+
+<!-- Eventcup Logo -->
+<img src="logo.png" alt="Eventcup Logo" class="logo">
 
 <script>
-    const modelViewer = document.querySelector("model-viewer");
-    const progressBar = document.querySelector('.main-progress-display__progress');
-    const animationPlay = document.querySelector(".animation-play");
-    const animationRewind = document.querySelector(".animation-rewind");
+const viewer = document.getElementById("viewer");
 
-    let loading = true;
+document.getElementById("bgColor").addEventListener("input", e => {
+  document.body.style.setProperty("--bg-color", e.target.value);
+});
 
-    const onProgress = (event) => {
-        if (loading) {
-            progressBar.style.width = `${event.detail.totalProgress * 100}%`;
-            if (event.detail.totalProgress === 1) {
-                loading = false;
-                modelViewer.classList.add('model-loaded');
-                document.documentElement.classList.add('ready');
-            }
-        }
-    };
+document.getElementById("exposure").addEventListener("input", e => {
+  viewer.exposure = e.target.value;
+});
 
-    modelViewer.addEventListener('progress', onProgress);
-
-    if (animationPlay) {
-        animationPlay.addEventListener('click', function () {
-            if (modelViewer.paused) {
-                modelViewer.play();
-                console.log('play');
-            } else {
-                modelViewer.pause();
-                console.log('pause');
-            }
-        });
-    }
-
-    if (animationRewind) {
-        animationRewind.addEventListener('click', function () {
-            let time = modelViewer.currentTime;
-            console.log(time);
-            if (time < 5) {
-                time = 0;
-            } else {
-                time = time - 5;
-            }
-            modelViewer.currentTime = time;
-            console.log('rewind 5');
-        });
-    }
+document.getElementById("rotate").addEventListener("change", e => {
+  viewer.autoRotate = e.target.checked;
+});
 </script>
 
 </body>
