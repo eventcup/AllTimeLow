@@ -14,7 +14,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(container.clientWidth, container.clientHeight);
 
-// wie bei Don: sRGB + ACES
+// sRGB + ACES wie im glTF-Viewer
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -26,7 +26,6 @@ container.appendChild(renderer.domElement);
 // Szene & Kamera
 // -----------------------------------------------------
 const scene = new THREE.Scene();
-// neutrales Grau – per GUI änderbar
 scene.background = new THREE.Color(0x404040);
 
 const camera = new THREE.PerspectiveCamera(
@@ -47,7 +46,7 @@ controls.autoRotate = false;
 controls.autoRotateSpeed = 1.2;
 
 // -----------------------------------------------------
-// Lights (Key + Hemi + Ambient, wie im gltf-viewer-Stil)
+// Lights
 // -----------------------------------------------------
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
 hemiLight.position.set(0, 1, 0);
@@ -60,7 +59,7 @@ scene.add(dirLight);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 
-// Grid (optional, über GUI)
+// Grid (per GUI an/aus)
 const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
@@ -71,15 +70,24 @@ scene.add(grid);
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
 
-new RGBELoader()
-  .load('studio_small_03_2k.hdr', (hdrTex) => {
+new RGBELoader().load(
+  'studio_small_03_2k.hdr',
+  (hdrTex) => {
     const envMap = pmremGenerator.fromEquirectangular(hdrTex).texture;
+    envMap.mapping = THREE.EquirectangularReflectionMapping;
+
     scene.environment = envMap;
-    // wenn du die HDRI auch als Hintergrund sehen willst:
+    // Wenn du den HDR-Hintergrund sehen willst:
     // scene.background = envMap;
+
     hdrTex.dispose();
     pmremGenerator.dispose();
-  });
+  },
+  undefined,
+  (err) => {
+    console.error('Fehler beim Laden der HDRI:', err);
+  }
+);
 
 // -----------------------------------------------------
 // GLB laden (NeuerBecher1.glb im Root)
@@ -97,8 +105,6 @@ loader.load(
       if (obj.isMesh) {
         obj.castShadow = true;
         obj.receiveShadow = true;
-        // WICHTIG: nichts an transparenten Materialien rumfummeln,
-        // glTF-Materialien so lassen wie sie sind
       }
     });
 
@@ -110,21 +116,20 @@ loader.load(
   }
 );
 
-// Objekt automatisch schön ins Bild setzen (ähnlich wie bei Don)
+// Objekt automatisch schön ins Bild setzen (robust & einfach)
 function frameObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
   const maxDim = Math.max(size.x, size.y, size.z);
-  const fitHeightDistance =
-    maxDim / (2 * Math.atan((Math.PI * camera.fov * Math.PI) / 360 / Math.PI)); // etwas overkill, aber robust
-  const fitWidthDistance = fitHeightDistance / camera.aspect;
-  const distance = Math.max(fitHeightDistance, fitWidthDistance);
+  const fov = camera.fov * (Math.PI / 180);
+  const distance = maxDim / (2 * Math.tan(fov / 2));
 
   camera.position.copy(center);
   camera.position.z += distance * 1.2;
   camera.position.y += distance * 0.2;
+
   camera.near = distance / 100;
   camera.far = distance * 100;
   camera.updateProjectionMatrix();
@@ -134,7 +139,7 @@ function frameObject(object) {
 }
 
 // -----------------------------------------------------
-// GUI (Display & Lighting – Don-Style)
+// GUI (Display & Lighting)
 // -----------------------------------------------------
 const params = {
   background: '#404040',
