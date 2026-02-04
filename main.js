@@ -1,30 +1,15 @@
 // main.js
-import * as THREE from 'https://unpkg.com/three@0.164.0/build/three.module.js';
-import { OrbitControls } from 'https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js?module';
-import { GLTFLoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js?module';
-import { RGBELoader } from 'https://unpkg.com/three@0.164.0/examples/jsm/loaders/RGBELoader.js?module';
+
+// ===== Imports über Import Map (siehe index.html) =====
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import GUI from 'https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js';
 
+// ===== Grund-Setup =====
 const container = document.getElementById('viewer-container');
 
-// -----------------------------------------------------
-// Renderer
-// -----------------------------------------------------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(container.clientWidth, container.clientHeight);
-
-// sRGB + ACES wie im glTF-Viewer
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
-renderer.physicallyCorrectLights = true;
-
-container.appendChild(renderer.domElement);
-
-// -----------------------------------------------------
-// Szene & Kamera
-// -----------------------------------------------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x404040);
 
@@ -34,21 +19,33 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   100
 );
-camera.position.set(0, 1.2, 2.5);
+camera.position.set(0, 1.4, 3);
 
-// -----------------------------------------------------
-// Orbit Controls
-// -----------------------------------------------------
+// ===== Renderer (ähnlich wie Don McCurdy) =====
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: true
+});
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.physicallyCorrectLights = true;
+
+container.appendChild(renderer.domElement);
+
+// ===== Orbit Controls =====
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.autoRotate = false;
-controls.autoRotateSpeed = 1.2;
+controls.enablePan = false;
+controls.minDistance = 1.5;
+controls.maxDistance = 6;
+controls.target.set(0, 1.1, 0);
 
-// -----------------------------------------------------
-// Lights
-// -----------------------------------------------------
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+// ===== Licht-Setup =====
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
 hemiLight.position.set(0, 1, 0);
 scene.add(hemiLight);
 
@@ -59,75 +56,79 @@ scene.add(dirLight);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 
-// Grid (per GUI an/aus)
+// Optionales Grid
 const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
 
-// -----------------------------------------------------
-// Environment HDR (studio_small_03_2k.hdr im Root)
-// -----------------------------------------------------
-const pmremGenerator = new THREE.PMREMGenerator(renderer);
-pmremGenerator.compileEquirectangularShader();
+// ===== Environment / HDRI =====
+const rgbeLoader = new RGBELoader();
 
-new RGBELoader().load(
+rgbeLoader.load(
   'studio_small_03_2k.hdr',
-  (hdrTex) => {
-    const envMap = pmremGenerator.fromEquirectangular(hdrTex).texture;
-
-    scene.environment = envMap;
-    // Wenn du den HDR-Hintergrund sehen willst:
-    // scene.background = envMap;
-
-    hdrTex.dispose();
-    pmremGenerator.dispose();
+  (texture) => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = texture;
+    // scene.background = texture; // falls du den HDR-Hintergrund sichtbar haben willst
   },
   undefined,
   (err) => {
-    console.error('Fehler beim Laden der HDRI:', err);
+    console.error('HDRI konnte nicht geladen werden:', err);
   }
 );
 
-// -----------------------------------------------------
-// GLB laden (NeuerBecher1.glb im Root)
-// -----------------------------------------------------
-const loader = new GLTFLoader();
+// ===== GLB laden =====
+const gltfLoader = new GLTFLoader();
 let model = null;
 
-loader.load(
+gltfLoader.load(
   'NeuerBecher1.glb',
   (gltf) => {
     model = gltf.scene;
-    scene.add(model);
 
-    model.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+    // Materialien minimal anfassen, damit Transparenz stabil ist
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+
+        mats.forEach((m) => {
+          if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+            if (m.transparent) {
+              m.depthWrite = false; // verhindert Flimmern bei Alpha
+            }
+            m.needsUpdate = true;
+          }
+        });
       }
     });
 
+    scene.add(model);
     frameObject(model);
   },
   undefined,
   (error) => {
-    console.error('Fehler beim Laden der GLB-Datei:', error);
+    console.error('Fehler beim Laden von NeuerBecher1.glb:', error);
   }
 );
 
-// Objekt automatisch ins Bild setzen
+// ===== Objekt schön ins Bild setzen =====
 function frameObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-
   const maxDim = Math.max(size.x, size.y, size.z);
+
   const fov = camera.fov * (Math.PI / 180);
-  const distance = maxDim / (2 * Math.tan(fov / 2));
+  let distance = maxDim / (2 * Math.tan(fov / 2));
+
+  distance *= 1.4;
 
   camera.position.copy(center);
-  camera.position.z += distance * 1.2;
+  camera.position.x += distance * 0.2;
   camera.position.y += distance * 0.2;
+  camera.position.z += distance;
 
   camera.near = distance / 100;
   camera.far = distance * 100;
@@ -137,18 +138,15 @@ function frameObject(object) {
   controls.update();
 }
 
-// -----------------------------------------------------
-// GUI (Display & Lighting)
-// -----------------------------------------------------
+// ===== GUI (ähnlich wie Don) =====
 const params = {
   background: '#404040',
   autoRotate: false,
-  exposure: 1.0,
+  exposure: 1.1,
   grid: false,
-  wireframe: false,
-  dirLightIntensity: 2.0,
-  hemiLightIntensity: 0.5,
-  ambientIntensity: 0.3
+  dirLight: 2.0,
+  hemiLight: 0.6,
+  ambient: 0.3
 };
 
 const gui = new GUI({ title: 'Viewer Controls' });
@@ -163,87 +161,63 @@ displayFolder
   .onChange((val) => {
     scene.background = new THREE.Color(val);
   });
-
 displayFolder
   .add(params, 'autoRotate')
-  .name('Auto Rotate')
-  .onChange((v) => {
-    controls.autoRotate = v;
-  });
-
+  .name('Auto Rotate');
 displayFolder
   .add(params, 'grid')
   .name('Grid')
   .onChange((v) => {
     grid.visible = v;
   });
-
-displayFolder
-  .add(params, 'wireframe')
-  .name('Wireframe')
-  .onChange((v) => {
-    if (!model) return;
-    model.traverse((obj) => {
-      if (obj.isMesh && obj.material) {
-        const apply = (m) => {
-          if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
-            m.wireframe = v;
-          }
-        };
-        if (Array.isArray(obj.material)) obj.material.forEach(apply);
-        else apply(obj.material);
-      }
-    });
-  });
-
 displayFolder.open();
 
-const lightingFolder = gui.addFolder('Lighting');
-lightingFolder
+const lightFolder = gui.addFolder('Lighting');
+lightFolder
   .add(params, 'exposure', 0.1, 3.0, 0.05)
   .name('Exposure')
-  .onChange((val) => {
-    renderer.toneMappingExposure = val;
+  .onChange((v) => {
+    renderer.toneMappingExposure = v;
   });
-
-lightingFolder
-  .add(params, 'dirLightIntensity', 0.0, 5.0, 0.1)
+lightFolder
+  .add(params, 'dirLight', 0.0, 5.0, 0.1)
   .name('Key Light')
   .onChange((v) => {
     dirLight.intensity = v;
   });
-
-lightingFolder
-  .add(params, 'hemiLightIntensity', 0.0, 3.0, 0.1)
+lightFolder
+  .add(params, 'hemiLight', 0.0, 3.0, 0.1)
   .name('Hemi Light')
   .onChange((v) => {
     hemiLight.intensity = v;
   });
-
-lightingFolder
-  .add(params, 'ambientIntensity', 0.0, 2.0, 0.05)
+lightFolder
+  .add(params, 'ambient', 0.0, 2.0, 0.05)
   .name('Ambient')
   .onChange((v) => {
     ambientLight.intensity = v;
   });
+lightFolder.open();
 
-lightingFolder.open();
-
-// -----------------------------------------------------
-// Resize & Renderloop
-// -----------------------------------------------------
-window.addEventListener('resize', onWindowResize);
-
-function onWindowResize() {
+// ===== Resize =====
+window.addEventListener('resize', () => {
   const width = container.clientWidth;
   const height = container.clientHeight;
+
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(width, height);
-}
 
+  renderer.setSize(width, height);
+});
+
+// ===== Render Loop =====
 function animate() {
   requestAnimationFrame(animate);
+
+  if (params.autoRotate && model) {
+    model.rotation.y += 0.005;
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }
