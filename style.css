@@ -1,4 +1,5 @@
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -25,12 +26,12 @@ html, body {
   pointer-events: none;
 }
 
-/* GUI immer oben */
+/* lil-gui oben halten */
 .lil-gui {
   z-index: 20 !important;
 }
 
-/* Kleinere Screens */
+/* Mobile-Optimierung */
 @media (max-width: 768px) {
   .eventcup-logo {
     width: 110px;
