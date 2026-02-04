@@ -1,123 +1,20 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Eventcup – 3D Viewer</title>
-
-<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-
-<style>
-html, body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  background: #ffffff;
-  font-family: sans-serif;
-}
-
-model-viewer {
-  width: 100%;
-  height: 100%;
-  background-color: var(--bg-color);
-}
-
-/* Control Panel */
-.controls {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(0,0,0,0.75);
-  padding: 15px;
-  border-radius: 10px;
-  color: white;
-  z-index: 200;
-  width: 220px;
-}
-
-.controls label {
-  display: block;
-  font-size: 13px;
-  margin-top: 10px;
-}
-
-.controls input[type="range"],
-.controls input[type="color"] {
-  width: 100%;
-}
-
-/* Logo */
-.logo {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: 160px;
-  z-index: 200;
-}
-
-@media (max-width: 768px) {
-  .controls {
-    width: 180px;
-  }
-  .logo {
-    width: 110px;
-  }
-}
-</style>
+  <meta charset="UTF-8" />
+  <title>EventCup 3D Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
 </head>
+<body>
+  <div id="viewer-container"></div>
 
-<body style="--bg-color:#ffffff;">
+  <!-- EventCup Logo -->
+  <img src="assets/eventcup-logo.png" alt="EventCup Logo" class="eventcup-logo" />
 
-<model-viewer
-  id="viewer"
-  src="NeuerBecher1.glb"
-  camera-controls
-  exposure="1.1"
-  shadow-intensity="0.6"
-  environment-image="neutral"
-  interaction-prompt="none"
-  auto-rotate="false"
-  min-camera-orbit="auto auto 20%"
-  max-camera-orbit="auto auto 300%"
->
-</model-viewer>
+  <!-- GUI-Container (optional, lil-gui hängt sich ins DOM) -->
 
-<!-- Controls -->
-<div class="controls">
-  <label>
-    Hintergrundfarbe
-    <input type="color" value="#ffffff" id="bgColor">
-  </label>
-
-  <label>
-    Helligkeit
-    <input type="range" min="0.5" max="2" step="0.05" value="1.1" id="exposure">
-  </label>
-
-  <label>
-    Auto Rotate
-    <input type="checkbox" id="rotate">
-  </label>
-</div>
-
-<!-- Eventcup Logo -->
-<img src="logo.png" alt="Eventcup Logo" class="logo">
-
-<script>
-const viewer = document.getElementById("viewer");
-
-document.getElementById("bgColor").addEventListener("input", e => {
-  document.body.style.setProperty("--bg-color", e.target.value);
-});
-
-document.getElementById("exposure").addEventListener("input", e => {
-  viewer.exposure = e.target.value;
-});
-
-document.getElementById("rotate").addEventListener("change", e => {
-  viewer.autoRotate = e.target.checked;
-});
-</script>
-
+  <!-- Main Three.js App -->
+  <script type="module" src="main.js"></script>
 </body>
 </html>
