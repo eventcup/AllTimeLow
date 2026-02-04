@@ -83,7 +83,7 @@ const loader = new GLTFLoader().setPath('models/');
 let model = null;
 
 loader.load(
-  'becher.glb', // <-- HIER dein GLB-Name
+  'NeuerBecher1.glb', // <-- HIER dein GLB-Name
   (gltf) => {
     model = gltf.scene;
     scene.add(model);
