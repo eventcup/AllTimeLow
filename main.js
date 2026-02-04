@@ -61,11 +61,11 @@ const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
 grid.visible = false;
 scene.add(grid);
 
-// ===== Environment / HDRI =====
+// ===== Environment / HDRI (aus assets/) =====
 const rgbeLoader = new RGBELoader();
 
 rgbeLoader.load(
-  'studio_small_03_2k.hdr',
+  'assets/studio_small_03_2k.hdr',
   (texture) => {
     texture.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = texture;
@@ -77,12 +77,12 @@ rgbeLoader.load(
   }
 );
 
-// ===== GLB laden =====
+// ===== GLB laden (aus assets/) =====
 const gltfLoader = new GLTFLoader();
 let model = null;
 
 gltfLoader.load(
-  'NeuerBecher1.glb',
+  'assets/NeuerBecher1.glb',
   (gltf) => {
     model = gltf.scene;
 
