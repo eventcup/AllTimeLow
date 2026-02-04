@@ -1,309 +1,283 @@
 // main.js
+// =====================================================
+// Three.js-Viewer für EventCup Becher
+// - lädt NeuerBecher1.glb aus asset/
+// - nutzt ein EXR-HDRI (Footprint Court) wie bei Don
+// - einfache GUI für Display, Lighting und Material
+// =====================================================
 
-// ===== Imports über Import Map (siehe index.html) =====
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
-import GUI from "https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js";
+import * as THREE from "https://unpkg.com/three@0.150.0/build/three.module.js";
+import { OrbitControls } from "https://unpkg.com/three@0.150.0/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "https://unpkg.com/three@0.150.0/examples/jsm/loaders/GLTFLoader.js";
+import { EXRLoader } from "https://unpkg.com/three@0.150.0/examples/jsm/loaders/EXRLoader.js";
+import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.18/dist/lil-gui.esm.js";
 
-// ===== Globale Variablen =====
+// === Pfade zu deinen Dateien =========================
+const MODEL_URL = "asset/NeuerBecher1.glb";
+
+// Environment aus Dons Setup (funktionierendes EXR-HDRI)
+const ENV_URL =
+  "https://storage.googleapis.com/donmccurdy-static/footprint_court_2k.exr";
+
+// === Grund-Setup =====================================
 const container = document.getElementById("viewer-container");
-let model = null;
-let plasticMaterial = null;
 
-// ===== Szene & Kamera =====
 const scene = new THREE.Scene();
-// Hintergrund dunkel, wird später vom GUI geändert
-scene.background = new THREE.Color(0x191919);
+scene.background = new THREE.Color(0x191919); // dunkles Grau (wie Don)
 
 const camera = new THREE.PerspectiveCamera(
-  45,
+  35,
   container.clientWidth / container.clientHeight,
-  0.1,
+  0.01,
   100
 );
-camera.position.set(0, 1.4, 3);
+camera.position.set(0, 1.3, 4);
 
-// ===== Renderer (Don-Style) =====
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
-  alpha: true
+  alpha: false,
 });
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-// Farbmanagement & Tonemapping
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
-
+renderer.toneMappingExposure = 1.0;
 container.appendChild(renderer.domElement);
 
-// ===== Orbit Controls =====
+// === OrbitControls ===================================
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.enablePan = false;
-controls.minDistance = 0.3;
-controls.maxDistance = 10;
+controls.target.set(0, 1.2, 0);
 
-// ===== Lichter (Key / Hemi / Ambient) =====
-const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
-keyLight.position.set(3, 5, 2);
-scene.add(keyLight);
-
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.4);
-hemiLight.position.set(0, 1, 0);
-scene.add(hemiLight);
-
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+// === Licht wie im Studio =============================
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 scene.add(ambientLight);
 
-// Optionales Grid
-const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
-grid.visible = false;
-scene.add(grid);
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+keyLight.position.set(2, 4, 5);
+scene.add(keyLight);
 
-// ===== Environment / HDRI (asset/studio_small_03_2k.hdr) via PMREM =====
-const rgbeLoader = new RGBELoader();
-const pmremGenerator = new THREE.PMREMGenerator(renderer);
-pmremGenerator.compileEquirectangularShader();
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.6);
+scene.add(hemiLight);
 
-rgbeLoader.load(
-  "asset/studio_small_03_2k.hdr",
-  (texture) => {
-    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-    scene.environment = envMap;
-
-    // <- zum Debuggen: HDR als Hintergrund anzeigen.
-    // Wenn du es nicht willst, kommentier die nächste Zeile aus:
-    scene.background = envMap;
-
-    texture.dispose();
-    pmremGenerator.dispose();
-  },
-  undefined,
-  (err) => {
-    console.error("HDRI konnte nicht geladen werden:", err);
-  }
-);
-
-// ===== GLB laden (asset/NeuerBecher1.glb) =====
+// === Loader ==========================================
 const gltfLoader = new GLTFLoader();
+const exrLoader = new EXRLoader().setDataType(THREE.FloatType);
 
-gltfLoader.load(
-  "asset/NeuerBecher1.glb",
-  (gltf) => {
-    model = gltf.scene;
+// === Variablen für Model & Material ==================
+let cup; // 3D Objekt
+let cupMaterial; // PrincipledMaterial / MeshPhysicalMaterial
 
-    model.traverse((child) => {
-      if (child.isMesh && child.material) {
-        const mats = Array.isArray(child.material)
-          ? child.material
-          : [child.material];
+// === Environment laden (mit Fehlerbehandlung) ========
+function loadEnvironment() {
+  return new Promise((resolve) => {
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
 
-        mats.forEach((m) => {
-          // Wir wollen nur physikalische / Standard-Materialien anfassen
-          if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
-            // Kandidat als Plastik-Material merken
-            if (
-              !plasticMaterial ||
-              (m.name &&
-                m.name.toLowerCase().includes("plastik")) ||
-              (m.name && m.name.toLowerCase().includes("becher"))
-            ) {
-              plasticMaterial = m;
-            }
+    exrLoader.load(
+      ENV_URL,
+      (texture) => {
+        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
 
-            // ::: GLAS-LOOK ERZWINGEN :::
-            // Basiswerte, die du mit dem GUI weiter anpassen kannst
-            m.roughness = 0.18;
-            m.metalness = 0.0;
-            m.envMapIntensity = 1.4;
+        scene.environment = envMap;
 
-            // Transparenz erzwingen (falls aus Blender nicht sauber kommt)
-            m.opacity = 0.35;          // 0.0 = komplett durchsichtig, 1.0 = voll
-            m.transparent = true;
-            m.depthWrite = false;      // verhindert harte Schnittkanten
-            m.side = THREE.FrontSide;  // keine doppelte Vorderseite
+        // Wenn du das HDRI auch als Hintergrund willst:
+        // scene.background = envMap;
 
-            // Falls Transmission vorhanden ist (KHR_materials_transmission)
-            if ("transmission" in m) {
-              m.transmission = 0.6;    // Lichtdurchlass
-            }
-
-            if ("ior" in m) {
-              m.ior = 1.5;             // Plastik / Glas Bereich
-            }
-
-            m.needsUpdate = true;
-          }
-        });
+        texture.dispose();
+        pmremGenerator.dispose();
+        resolve();
+      },
+      undefined,
+      (err) => {
+        console.error("HDRI konnte nicht geladen werden:", err);
+        pmremGenerator.dispose();
+        // Wir machen ohne Environment weiter, damit nichts crasht
+        resolve();
       }
-    });
-
-    scene.add(model);
-    frameObject(model);
-    setupMaterialGUI(plasticMaterial); // Material-Slider hinzufügen
-  },
-  undefined,
-  (error) => {
-    console.error("Fehler beim Laden von NeuerBecher1.glb:", error);
-  }
-);
-
-// ===== Objekt ins Bild setzen =====
-function frameObject(object) {
-  const box = new THREE.Box3().setFromObject(object);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-
-  const fitOffset = 1.0;
-  const fov = (camera.fov * Math.PI) / 180;
-  let distance = (maxDim / 2) / Math.tan(fov / 2);
-  distance *= fitOffset;
-
-  const direction = new THREE.Vector3(0.4, 0.3, 1).normalize();
-  camera.position.copy(center).addScaledVector(direction, distance);
-
-  camera.near = maxDim / 100;
-  camera.far = maxDim * 100;
-  camera.updateProjectionMatrix();
-
-  controls.target.copy(center);
-  controls.update();
+    );
+  });
 }
 
-// ===== GUI (Viewer Controls + Lighting) =====
-const params = {
-  background: "#191919",
-  autoRotate: false,
-  grid: false,
-  exposure: 1.1,
-  keyLight: keyLight.intensity,
-  hemiLight: hemiLight.intensity,
-  ambient: ambientLight.intensity
-};
+// === GLB laden =======================================
+function loadModel() {
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(
+      MODEL_URL,
+      (gltf) => {
+        cup = gltf.scene;
+        scene.add(cup);
 
+        // Auto-Framing: Model in die Mitte setzen & Kamera darauf einstellen
+        const box = new THREE.Box3().setFromObject(cup);
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+
+        // Modell auf Ursprung verschieben
+        cup.position.sub(center);
+
+        // Kamera-Distanz so wählen, dass der Becher gut ins Bild passt
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = (camera.fov * Math.PI) / 180;
+        let cameraZ = maxDim / (2 * Math.tan(fov / 2));
+        cameraZ *= 1.6; // kleiner Sicherheitsfaktor, damit nichts abgeschnitten wird
+
+        camera.position.set(0, maxDim * 0.25, cameraZ);
+        controls.target.set(0, maxDim * 0.25, 0);
+        controls.update();
+
+        camera.near = cameraZ / 100;
+        camera.far = cameraZ * 10;
+        camera.updateProjectionMatrix();
+
+        // Hauptmaterial finden (Becher)
+        cup.traverse((child) => {
+          if (child.isMesh && !cupMaterial) {
+            cupMaterial = child.material;
+          }
+        });
+
+        resolve();
+      },
+      undefined,
+      (error) => {
+        console.error("Fehler beim Laden von NeuerBecher1.glb:", error);
+        reject(error);
+      }
+    );
+  });
+}
+
+// === GUI (lil-gui) ===================================
 const gui = new GUI({ title: "Viewer Controls" });
-gui.domElement.style.position = "fixed";
-gui.domElement.style.top = "20px";
-gui.domElement.style.right = "20px";
 
 // Display
 const displayFolder = gui.addFolder("Display");
+const displayParams = {
+  background: "#191919",
+  autoRotate: false,
+};
 displayFolder
-  .addColor(params, "background")
+  .addColor(displayParams, "background")
   .name("Background")
-  .onChange((val) => {
-    // Wenn HDR als Background gesetzt ist, überschreiben wir es hier bewusst
-    scene.background = new THREE.Color(val);
+  .onChange((value) => {
+    scene.background = new THREE.Color(value);
   });
-displayFolder.add(params, "autoRotate").name("Auto Rotate");
 displayFolder
-  .add(params, "grid")
-  .name("Grid")
-  .onChange((v) => {
-    grid.visible = v;
+  .add(displayParams, "autoRotate")
+  .name("Auto Rotate")
+  .onChange((value) => {
+    controls.autoRotate = value;
+    controls.autoRotateSpeed = 0.8;
   });
-displayFolder.open();
 
 // Lighting
-const lightFolder = gui.addFolder("Lighting");
-lightFolder
-  .add(params, "exposure", 0.1, 3.0, 0.05)
+const lightingFolder = gui.addFolder("Lighting");
+const lightingParams = {
+  exposure: 1.0,
+  keyLight: 2.0,
+  hemiLight: 0.6,
+  ambient: 0.3,
+};
+lightingFolder
+  .add(lightingParams, "exposure", 0.1, 2.0, 0.01)
   .name("Exposure")
-  .onChange((v) => {
-    renderer.toneMappingExposure = v;
+  .onChange((value) => {
+    renderer.toneMappingExposure = value;
   });
-lightFolder
-  .add(params, "keyLight", 0.0, 5.0, 0.1)
+lightingFolder
+  .add(lightingParams, "keyLight", 0, 4, 0.1)
   .name("Key Light")
-  .onChange((v) => {
-    keyLight.intensity = v;
+  .onChange((value) => {
+    keyLight.intensity = value;
   });
-lightFolder
-  .add(params, "hemiLight", 0.0, 3.0, 0.1)
+lightingFolder
+  .add(lightingParams, "hemiLight", 0, 2, 0.1)
   .name("Hemi Light")
-  .onChange((v) => {
-    hemiLight.intensity = v;
+  .onChange((value) => {
+    hemiLight.intensity = value;
   });
-lightFolder
-  .add(params, "ambient", 0.0, 2.0, 0.05)
+lightingFolder
+  .add(lightingParams, "ambient", 0, 2, 0.05)
   .name("Ambient")
-  .onChange((v) => {
-    ambientLight.intensity = v;
+  .onChange((value) => {
+    ambientLight.intensity = value;
   });
-lightFolder.open();
 
-// ===== Material-GUI für Plastik =====
-function setupMaterialGUI(mat) {
-  if (!mat) {
-    console.warn("Kein Plastik-Material gefunden – Material-GUI wird übersprungen.");
-    return;
-  }
+// Material (Plastic)
+const materialFolder = gui.addFolder("Material (Plastic)");
+const materialParams = {
+  opacity: 0.35,
+  transmission: 0.9,
+  roughness: 0.15,
+  envIntensity: 1.5,
+  ior: 1.45,
+};
+function updateMaterialControls() {
+  if (!cupMaterial) return;
 
-  const materialParams = {
-    roughness: mat.roughness ?? 0.2,
-    metalness: mat.metalness ?? 0.0,
-    transmission: mat.transmission ?? 0.6,
-    ior: mat.ior ?? 1.5,
-    opacity: mat.opacity ?? 0.35
-  };
+  // Falls es kein MeshPhysicalMaterial ist, konvertieren
+  if (!(cupMaterial instanceof THREE.MeshPhysicalMaterial)) {
+    const newMat = new THREE.MeshPhysicalMaterial();
+    newMat.copy(cupMaterial);
+    newMat.roughness = cupMaterial.roughness ?? 0.15;
+    newMat.metalness = cupMaterial.metalness ?? 0.0;
+    cupMaterial = newMat;
 
-  const matFolder = gui.addFolder("Material (Plastic)");
-
-  matFolder
-    .add(materialParams, "roughness", 0.0, 1.0, 0.01)
-    .name("Roughness")
-    .onChange((v) => {
-      mat.roughness = v;
-      mat.needsUpdate = true;
+    cup.traverse((child) => {
+      if (child.isMesh) child.material = cupMaterial;
     });
-
-  matFolder
-    .add(materialParams, "metalness", 0.0, 1.0, 0.01)
-    .name("Metalness")
-    .onChange((v) => {
-      mat.metalness = v;
-      mat.needsUpdate = true;
-    });
-
-  if ("transmission" in mat) {
-    matFolder
-      .add(materialParams, "transmission", 0.0, 1.0, 0.01)
-      .name("Transmission")
-      .onChange((v) => {
-        mat.transmission = v;
-        mat.needsUpdate = true;
-      });
   }
 
-  if ("ior" in mat) {
-    matFolder
-      .add(materialParams, "ior", 1.0, 2.0, 0.01)
-      .name("IOR")
-      .onChange((v) => {
-        mat.ior = v;
-        mat.needsUpdate = true;
-      });
-  }
+  cupMaterial.transparent = true;
+  cupMaterial.opacity = materialParams.opacity;
+  cupMaterial.transmission = materialParams.transmission;
+  cupMaterial.roughness = materialParams.roughness;
+  cupMaterial.envMapIntensity = materialParams.envIntensity;
+  cupMaterial.ior = materialParams.ior;
+  cupMaterial.thickness = 0.2;
+  cupMaterial.needsUpdate = true;
 
-  matFolder
-    .add(materialParams, "opacity", 0.0, 1.0, 0.01)
+  materialFolder
+    .add(materialParams, "opacity", 0.1, 1.0, 0.01)
     .name("Opacity")
     .onChange((v) => {
-      mat.opacity = v;
-      mat.transparent = v < 1.0;
-      mat.depthWrite = !mat.transparent;
-      mat.needsUpdate = true;
+      cupMaterial.opacity = v;
+      cupMaterial.needsUpdate = true;
     });
-
-  matFolder.open();
+  materialFolder
+    .add(materialParams, "transmission", 0, 1.0, 0.01)
+    .name("Transmission")
+    .onChange((v) => {
+      cupMaterial.transmission = v;
+      cupMaterial.needsUpdate = true;
+    });
+  materialFolder
+    .add(materialParams, "roughness", 0, 1.0, 0.01)
+    .name("Roughness")
+    .onChange((v) => {
+      cupMaterial.roughness = v;
+      cupMaterial.needsUpdate = true;
+    });
+  materialFolder
+    .add(materialParams, "envIntensity", 0, 3, 0.05)
+    .name("Env Intensity")
+    .onChange((v) => {
+      cupMaterial.envMapIntensity = v;
+      cupMaterial.needsUpdate = true;
+    });
+  materialFolder
+    .add(materialParams, "ior", 1.0, 2.0, 0.01)
+    .name("IOR")
+    .onChange((v) => {
+      cupMaterial.ior = v;
+      cupMaterial.needsUpdate = true;
+    });
 }
 
-// ===== Resize =====
+// === Resize ==========================================
 window.addEventListener("resize", () => {
   const width = container.clientWidth;
   const height = container.clientHeight;
@@ -314,16 +288,17 @@ window.addEventListener("resize", () => {
   renderer.setSize(width, height);
 });
 
-// ===== Render Loop =====
+// === Render-Loop =====================================
 function animate() {
   requestAnimationFrame(animate);
-
-  if (params.autoRotate && model) {
-    model.rotation.y += 0.005;
-  }
-
   controls.update();
   renderer.render(scene, camera);
 }
 
-animate();
+// === Start: zuerst Environment, dann Modell ==========
+(async function start() {
+  await loadEnvironment();
+  await loadModel();
+  updateMaterialControls();
+  animate();
+})();
