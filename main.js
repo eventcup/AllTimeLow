@@ -7,11 +7,14 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
 import GUI from "https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js";
 
-// ===== Grund-Setup =====
+// ===== Globale Variablen =====
 const container = document.getElementById("viewer-container");
+let model = null;
+let plasticMaterial = null;
 
+// ===== Szene & Kamera =====
 const scene = new THREE.Scene();
-// etwas dunkler, näher an Don
+// dunkler Hintergrund, ähnlich Don
 scene.background = new THREE.Color(0x191919);
 
 const camera = new THREE.PerspectiveCamera(
@@ -34,8 +37,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
-// useLegacyLights lassen wir auf dem Default (false)
-// renderer.useLegacyLights = false;
+// useLegacyLights bleibt auf Default (false)
 
 container.appendChild(renderer.domElement);
 
@@ -43,19 +45,19 @@ container.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.enablePan = false;
-controls.minDistance = 0.3;   // näher ranzoomen erlaubt
+controls.minDistance = 0.3;
 controls.maxDistance = 10;
 
 // ===== Lichter (Key / Hemi / Ambient) =====
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
 keyLight.position.set(3, 5, 2);
 scene.add(keyLight);
 
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.6);
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x080820, 0.4);
 hemiLight.position.set(0, 1, 0);
 scene.add(hemiLight);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
 scene.add(ambientLight);
 
 // Optionales Grid (über GUI zuschaltbar)
@@ -72,7 +74,7 @@ rgbeLoader.load(
   "asset/studio_small_03_2k.hdr",
   (texture) => {
     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-    scene.environment = envMap;     // nur als Environment, Hintergrund bleibt Color
+    scene.environment = envMap;
 
     texture.dispose();
     pmremGenerator.dispose();
@@ -85,14 +87,12 @@ rgbeLoader.load(
 
 // ===== GLB laden (aus asset/) =====
 const gltfLoader = new GLTFLoader();
-let model = null;
 
 gltfLoader.load(
   "asset/NeuerBecher1.glb",
   (gltf) => {
     model = gltf.scene;
 
-    // Materialien anpassen: Transparenz sauber & Environment etwas verstärken
     model.traverse((child) => {
       if (child.isMesh && child.material) {
         const mats = Array.isArray(child.material)
@@ -101,8 +101,13 @@ gltfLoader.load(
 
         mats.forEach((m) => {
           if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+            // ersten "Plastik"-Kandidaten merken
+            if (!plasticMaterial) {
+              plasticMaterial = m;
+            }
+
             if (m.transparent) {
-              m.depthWrite = false; // verhindert Flimmern bei Alpha
+              m.depthWrite = false; // flimmerfreie Transparenz
             }
             if ("envMapIntensity" in m) {
               m.envMapIntensity = 1.2; // etwas stärkere Reflektionen
@@ -114,7 +119,8 @@ gltfLoader.load(
     });
 
     scene.add(model);
-    frameObject(model); // Kamera passend setzen
+    frameObject(model);          // Kamera passend setzen
+    setupMaterialGUI(plasticMaterial); // Material-Slider hinzufügen
   },
   undefined,
   (error) => {
@@ -122,20 +128,20 @@ gltfLoader.load(
   }
 );
 
-// ===== Objekt ins Bild setzen (ähnlich wie Don) =====
+// ===== Objekt ins Bild setzen =====
 function frameObject(object) {
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
 
-  const fitOffset = 1.0; // wie nah dran, 1.0 ist ziemlich nah
+  const fitOffset = 1.0; // wie nah dran, 1.0 = recht nah
   const fov = (camera.fov * Math.PI) / 180;
   let distance = (maxDim / 2) / Math.tan(fov / 2);
 
   distance *= fitOffset;
 
-  // Kamera positionieren
+  // Kamera aus leicht schräger Richtung
   const direction = new THREE.Vector3(0.4, 0.3, 1).normalize();
   camera.position.copy(center).addScaledVector(direction, distance);
 
@@ -147,15 +153,15 @@ function frameObject(object) {
   controls.update();
 }
 
-// ===== GUI (ähnlich wie bei Don) =====
+// ===== GUI (Viewer Controls + Lighting) =====
 const params = {
   background: "#191919",
   autoRotate: false,
   grid: false,
   exposure: 1.1,
-  keyLight: 2.0,
-  hemiLight: 0.6,
-  ambient: 0.3
+  keyLight: keyLight.intensity,
+  hemiLight: hemiLight.intensity,
+  ambient: ambientLight.intensity
 };
 
 const gui = new GUI({ title: "Viewer Controls" });
@@ -207,6 +213,68 @@ lightFolder
     ambientLight.intensity = v;
   });
 lightFolder.open();
+
+// ===== Material-GUI für Plastik =====
+function setupMaterialGUI(mat) {
+  if (!mat) return;
+
+  const materialParams = {
+    roughness: mat.roughness ?? 0.4,
+    metalness: mat.metalness ?? 0.0,
+    transmission: mat.transmission ?? 0.0,
+    ior: mat.ior ?? 1.5,
+    opacity: mat.opacity ?? 1.0
+  };
+
+  const matFolder = gui.addFolder("Material (Plastic)");
+
+  matFolder
+    .add(materialParams, "roughness", 0.0, 1.0, 0.01)
+    .name("Roughness")
+    .onChange((v) => {
+      mat.roughness = v;
+      mat.needsUpdate = true;
+    });
+
+  matFolder
+    .add(materialParams, "metalness", 0.0, 1.0, 0.01)
+    .name("Metalness")
+    .onChange((v) => {
+      mat.metalness = v;
+      mat.needsUpdate = true;
+    });
+
+  if ("transmission" in mat) {
+    matFolder
+      .add(materialParams, "transmission", 0.0, 1.0, 0.01)
+      .name("Transmission")
+      .onChange((v) => {
+        mat.transmission = v;
+        mat.needsUpdate = true;
+      });
+  }
+
+  if ("ior" in mat) {
+    matFolder
+      .add(materialParams, "ior", 1.0, 2.0, 0.01)
+      .name("IOR")
+      .onChange((v) => {
+        mat.ior = v;
+        mat.needsUpdate = true;
+      });
+  }
+
+  matFolder
+    .add(materialParams, "opacity", 0.0, 1.0, 0.01)
+    .name("Opacity")
+    .onChange((v) => {
+      mat.opacity = v;
+      mat.transparent = v < 1.0;
+      mat.needsUpdate = true;
+    });
+
+  matFolder.open();
+}
 
 // ===== Resize =====
 window.addEventListener("resize", () => {
