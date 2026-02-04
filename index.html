@@ -5,19 +5,20 @@
   <title>EventCup 3D Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- ===== Import Maps (WICHTIG für GitHub Pages) ===== -->
+  <!-- ===== Import Maps (WICHTIG für three-Imports) ===== -->
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
     }
   }
   </script>
 
-  <!-- ===== Styles ===== -->
+  <!-- Optional externe CSS-Datei -->
   <link rel="stylesheet" href="style.css" />
 
+  <!-- Basis-Styles, falls style.css leer ist -->
   <style>
     html, body {
       margin: 0;
@@ -51,12 +52,11 @@
   <!-- ===== Three.js Container ===== -->
   <div id="viewer-container"></div>
 
-  <!-- ===== EventCup Logo ===== -->
-  <img src="logo.png" alt="EventCup Logo" class="eventcup-logo" />
+  <!-- ===== EventCup Logo (jetzt in assets/) ===== -->
+  <img src="assets/logo.png" alt="EventCup Logo" class="eventcup-logo" />
 
   <!-- ===== Main Script ===== -->
   <script type="module" src="main.js"></script>
 
 </body>
 </html>
-
